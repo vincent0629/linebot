@@ -1,12 +1,4 @@
 {
   "name": "linebot",
-  "version": "0.0.0",
-  "devDependencies": {
-    "wrangler": "2.0.27"
-  },
-  "private": true,
-  "scripts": {
-    "start": "wrangler dev",
-    "publish": "wrangler publish"
-  }
+  "version": "0.0.0"
 }

@@ -1,6 +1,6 @@
-async function verifyRequest(request) {
+function verifyRequest(request) {
   if (request.method === 'POST') {
-    const input = await request.json();
+    const input = request.body;
     if (input.events && input.events[0].message.type === 'text')
       return {
         replyToken: input.events[0].replyToken,
@@ -50,26 +50,31 @@ function reply(replyToken, text, env) {
 async function handleRequest(request, env) {
   let resp;
 
-  const { pathname } = new URL(request.url);
-  const input = await verifyRequest(request);
+  const pathname = request.path;
+  const input = verifyRequest(request);
   if (input) {
     let promise;
-    if (pathname === '/chatsonic')
+    if (pathname.endsWith('/chatsonic'))
       promise = chatsonic(input.text, env);
     if (promise) {
       await promise
         .then(text => reply(input.replyToken, text, env));
-      resp = new Response('OK');
+      resp = 'OK';
     }
   }
 
   if (!resp)
-    resp = new Response('Invalid request');
+    resp = 'Invalid request';
   return resp;
 }
 
-export default {
-  fetch(request, env) {
-    return handleRequest(request, env);
-  }
+/**
+ * Responds to any HTTP request.
+ *
+ * @param {!express:Request} req HTTP request context.
+ * @param {!express:Response} res HTTP response context.
+ */
+exports.handle = (req, res) => {
+  const resp = handleRequest(req, process.env);
+  res.status(200).json(resp);
 };
