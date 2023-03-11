@@ -31,7 +31,6 @@ function chatsonic(text, env) {
 }
 
 function reply(replyToken, text, env) {
-  console.log(text);
   return fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
