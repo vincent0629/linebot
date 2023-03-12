@@ -8,10 +8,10 @@ function verifyRequest(request) {
             text: input.events[0].message.text,
           };
         else
-          return Promise.reject();
+          return Promise.reject('Invalid body');
       });
   } else {
-    return Promise.reject();
+    return Promise.reject('Invalid method');
   }
 }
 
@@ -71,11 +71,11 @@ function handleRequest(request, env) {
         return promise
           .then(messages => reply(input.replyToken, messages, env));
       } else {
-        return Promise.reject();
+        return Promise.reject('Invalid path');
       }
     })
     .then(resp => resp.json())
-    .catch(() => 'Invalid request');
+    .catch(err => err || 'Invalid request');
 }
 
 export default {
