@@ -49,6 +49,8 @@ function handleRequest(request) {
       const pathname = request.path.substring(1);
       if (pathname.endsWith('chatsonic'))
         input.apiKey = process.env.CHATSONIC_API_KEY;
+      else
+        return 'Invalid path';
       const worker = new Worker(path.join(__dirname, `${pathname}.js`), {
         workerData: input,
       });
