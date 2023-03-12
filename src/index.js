@@ -1,57 +1,40 @@
+const express = require('express');
+const fetch = require('node-fetch');
+const path = require('path');
+const { Worker } = require('worker_threads');
+
+port = -1;
+for (let i = 2; i < process.argv.length; ++i) {
+  if (process.argv[i] === '-p')
+    port = parseInt(process.argv[++i]);
+}
+
+if (port === -1) {
+  console.log('Usage: node', path.basename(__filename), '[-p <port>]');
+  return;
+}
+
 function verifyRequest(request) {
   if (request.method === 'POST') {
-    return request.json()
-      .then(input => {
-        if (input.events && input.events[0].message.type === 'text')
-          return {
-            replyToken: input.events[0].replyToken,
-            text: input.events[0].message.text,
-          };
-        else
-          return Promise.reject('Invalid body');
+    const input = request.body;
+    if (input.events && input.events[0].message.type === 'text')
+      return Promise.resolve({
+        replyToken: input.events[0].replyToken,
+        text: input.events[0].message.text,
       });
+    else
+      return Promise.reject('Invalid body');
   } else {
     return Promise.reject('Invalid method');
   }
 }
 
-function chatsonic(text, env) {
-  return fetch('https://api.writesonic.com/v2/business/content/chatsonic?engine=premium&language=en', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-API-KEY': env.CHATSONIC_API_KEY,
-    },
-    body: JSON.stringify({
-      'enable_google_results': false,
-      'enable_memory': false,
-      'input_text': text
-    }),
-  }).then(resp => resp.json())
-    .then(json => {
-      const messages = json.image_urls.map(url => {
-        return {
-          type: 'image',
-          originalContentUrl: url,
-          previewImageUrl: url,
-        };
-      });
-      if (json.message)
-        messages.unshift({
-          type: 'text',
-          text: json.message,
-        });
-      return messages;
-    });
-}
-
-function reply(replyToken, messages, env) {
+function reply(replyToken, messages) {
   return fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${env.LINE_ACCESS_TOKEN}`,
+      'Authorization': `Bearer ${process.env.LINE_ACCESS_TOKEN}`,
     },
     body: JSON.stringify({
       replyToken,
@@ -60,26 +43,31 @@ function reply(replyToken, messages, env) {
   });
 }
 
-function handleRequest(request, env) {
+function handleRequest(request) {
   return verifyRequest(request)
     .then(input => {
-      const { pathname } = new URL(request.url);
-      let promise;
-      if (pathname.endsWith('/chatsonic'))
-        promise = chatsonic(input.text, env);
-      if (promise) {
-        return promise
-          .then(messages => reply(input.replyToken, messages, env));
-      } else {
-        return Promise.reject('Invalid path');
-      }
+      const pathname = request.path.substring(1);
+      if (pathname.endsWith('chatsonic'))
+        input.apiKey = process.env.CHATSONIC_API_KEY;
+      const worker = new Worker(path.join(__dirname, `${pathname}.js`), {
+        workerData: input,
+      });
+      worker.on('message', data => {
+        reply(data.replyToken, data.messages);
+      });
+      return 'OK';
     })
-    .then(resp => resp.json())
     .catch(err => err || 'Invalid request');
 }
 
-export default {
-  async fetch(request, env) {
-    return new Response(JSON.stringify(await handleRequest(request, env)));
-  }
-};
+const app = express();
+app.use(express.json());
+
+app.post('/*', (req, res) => {
+  handleRequest(req)
+    .then(json => res.json(json));
+});
+
+app.listen(port, () => {
+  console.log('Listening on port', port);
+});

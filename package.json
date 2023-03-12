@@ -1,12 +1,10 @@
 {
   "name": "linebot",
-  "version": "0.0.0",
-  "private": true,
   "scripts": {
-    "start": "wrangler dev",
-    "publish": "wrangler publish"
+    "start": "node src/index.js"
   },
-  "devDependencies": {
-    "wrangler": "^2.12.2"
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.6.9"
   }
 }
