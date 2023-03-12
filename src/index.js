@@ -25,12 +25,24 @@ function chatsonic(text, env) {
       }),
     }).then(resp => resp.json())
       .then(json => {
-        resolve(json.message);
+        const messages = json.image_urls.map(url => {
+          return {
+            type: 'image',
+            originalContentUrl: url,
+            previewImageUrl: url,
+          };
+        });
+        if (json.message)
+          messages.unshift({
+            type: 'text',
+            text: json.message,
+          });
+        resolve(messages);
       });
   });
 }
 
-function reply(replyToken, text, env) {
+function reply(replyToken, messages, env) {
   return fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
@@ -39,17 +51,12 @@ function reply(replyToken, text, env) {
     },
     body: JSON.stringify({
       replyToken,
-      messages: [{
-        type: 'text',
-        text,
-      }]
+      messages,
     }),
   });
 }
 
-async function handleRequest(request, env) {
-  let resp;
-
+function handleRequest(request, env) {
   const pathname = request.path;
   const input = verifyRequest(request);
   if (input) {
@@ -57,15 +64,13 @@ async function handleRequest(request, env) {
     if (pathname.endsWith('/chatsonic'))
       promise = chatsonic(input.text, env);
     if (promise) {
-      await promise
-        .then(text => reply(input.replyToken, text, env));
-      resp = 'OK';
+      return promise
+        .then(messages => reply(input.replyToken, messages, env))
+        .then(resp => resp.json());
     }
   }
 
-  if (!resp)
-    resp = 'Invalid request';
-  return resp;
+  return Promise.reject('Invalid request');
 }
 
 /**
@@ -75,6 +80,10 @@ async function handleRequest(request, env) {
  * @param {!express:Response} res HTTP response context.
  */
 exports.handle = (req, res) => {
-  const resp = handleRequest(req, process.env);
-  res.status(200).json(resp);
+  handleRequest(req, process.env)
+    .then(resp => {
+      res.status(200).json(resp);
+    }).catch(err => {
+      res.status(400).json(err);
+    });
 };
