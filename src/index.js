@@ -63,7 +63,7 @@ function handleRequest(request) {
 const app = express();
 app.use(express.json());
 
-app.post('/*', (req, res) => {
+app.post('/:bot', (req, res) => {
   handleRequest(req)
     .then(json => res.json(json));
 });
