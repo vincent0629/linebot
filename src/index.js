@@ -1,36 +1,52 @@
-async function verifyRequest(request) {
+function verifyRequest(request) {
   if (request.method === 'POST') {
-    const input = await request.json();
-    if (input.events && input.events[0].message.type === 'text')
-      return {
-        replyToken: input.events[0].replyToken,
-        text: input.events[0].message.text,
-      };
+    return request.json()
+      .then(input => {
+        if (input.events && input.events[0].message.type === 'text')
+          return {
+            replyToken: input.events[0].replyToken,
+            text: input.events[0].message.text,
+          };
+        else
+          return Promise.reject();
+      });
+  } else {
+    return Promise.reject();
   }
 }
 
 function chatsonic(text, env) {
-  return new Promise((resolve) => {
-    fetch('https://api.writesonic.com/v2/business/content/chatsonic?engine=premium&language=en', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-API-KEY': env.CHATSONIC_API_KEY,
-      },
-      body: JSON.stringify({
-        'enable_google_results': false,
-        'enable_memory': false,
-        'input_text': text
-      }),
-    }).then(resp => resp.json())
-      .then(json => {
-        resolve(json.message);
+  return fetch('https://api.writesonic.com/v2/business/content/chatsonic?engine=premium&language=en', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-API-KEY': env.CHATSONIC_API_KEY,
+    },
+    body: JSON.stringify({
+      'enable_google_results': false,
+      'enable_memory': false,
+      'input_text': text
+    }),
+  }).then(resp => resp.json())
+    .then(json => {
+      const messages = json.image_urls.map(url => {
+        return {
+          type: 'image',
+          originalContentUrl: url,
+          previewImageUrl: url,
+        };
       });
-  });
+      if (json.message)
+        messages.unshift({
+          type: 'text',
+          text: json.message,
+        });
+      return messages;
+    });
 }
 
-function reply(replyToken, text, env) {
+function reply(replyToken, messages, env) {
   return fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
@@ -39,37 +55,31 @@ function reply(replyToken, text, env) {
     },
     body: JSON.stringify({
       replyToken,
-      messages: [{
-        type: 'text',
-        text,
-      }]
+      messages,
     }),
   });
 }
 
-async function handleRequest(request, env) {
-  let resp;
-
-  const { pathname } = new URL(request.url);
-  const input = await verifyRequest(request);
-  if (input) {
-    let promise;
-    if (pathname === '/chatsonic')
-      promise = chatsonic(input.text, env);
-    if (promise) {
-      await promise
-        .then(text => reply(input.replyToken, text, env));
-      resp = new Response('OK');
-    }
-  }
-
-  if (!resp)
-    resp = new Response('Invalid request');
-  return resp;
+function handleRequest(request, env) {
+  return verifyRequest(request)
+    .then(input => {
+      const { pathname } = new URL(request.url);
+      let promise;
+      if (pathname.endsWith('/chatsonic'))
+        promise = chatsonic(input.text, env);
+      if (promise) {
+        return promise
+          .then(messages => reply(input.replyToken, messages, env));
+      } else {
+        return Promise.reject();
+      }
+    }).catch(() => {
+      return 'Invalid request';
+    });
 }
 
 export default {
-  fetch(request, env) {
-    return handleRequest(request, env);
+  async fetch(request, env) {
+    return new Response(JSON.stringify(await handleRequest(request, env)));
   }
 };
