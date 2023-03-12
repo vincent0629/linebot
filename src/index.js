@@ -73,9 +73,9 @@ function handleRequest(request, env) {
       } else {
         return Promise.reject();
       }
-    }).catch(() => {
-      return 'Invalid request';
-    });
+    })
+    .then(resp => resp.json())
+    .catch(() => 'Invalid request');
 }
 
 export default {
